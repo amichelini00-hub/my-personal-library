@@ -1,2 +1,4 @@
-# my-personal-library
-A personal library that show owned and wishlist books, and lets you search manually, by ISBN number or barcode scanner.
+My Personal Library v21
+
+Library Read filter: the filter title is “Read?” and is separate from the dropdown. The dropdown contains only All, Read, Unread, and DNF.
+Wishlist has no Read filter.
