@@ -276,6 +276,296 @@ async function findMissingCovers(){
   $("coverProgress").textContent=`Finished. Found ${changed} new cover${changed===1?"":"s"}. Existing covers were not searched again.`;
   toast(changed?`Found ${changed} missing cover${changed===1?"":"s"}`:"No missing covers found");
 }
+function bookDetailsClickHandler(e){
+    let c=e.target.closest(".book-card");
+    if(!c)return;
+    if(e.target.closest("button,a,input,select,label"))return;
+    openBookDetails(c.dataset.bookId);
+}
+
+$("libraryList").addEventListener("click",bookDetailsClickHandler);
+$("wishlistList").addEventListener("click",bookDetailsClickHandler);
+
+$("lookup").onclick=()=>lookupISBN($("isbn").value);
+
+$("isbn").addEventListener("keydown",e=>{
+    if(e.key==="Enter"){
+        e.preventDefault();
+        lookupISBN(e.target.value);
+    }
+});
+
+document.querySelectorAll(".nav").forEach(n=>{
+    n.onclick=()=>{
+        document.querySelectorAll(".nav").forEach(x=>x.classList.remove("active"));
+        n.classList.add("active");
+
+        document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+        $(n.dataset.view).classList.add("active");
+
+        n.dataset.view==="scanner"
+            ? startCamera()
+            : stopCamera();
+
+        if(n.dataset.view==="insights"){
+            stats();
+        }
+    };
+});
+
+$("search").oninput=renderLibrary;
+$("author").onchange=renderLibrary;
+$("genre").onchange=renderLibrary;
+$("series").onchange=renderLibrary;
+$("readState").onchange=renderLibrary;
+$("librarySort").onchange=renderLibrary;
+
+$("wishlistSort").onchange=renderWishlist;
+$("wishSearch").oninput=renderWishlist;
+$("wishAuthor").onchange=renderWishlist;
+$("wishGenre").onchange=renderWishlist;
+$("wishSeries").onchange=renderWishlist;
+
+$("coverSearchBtn").onclick=searchCovers;
+$("libibSearchBtn").onclick=searchLibibFirst;
+$("openLibibBtn").onclick=openLibib;
+
+$("coverUpload").onchange=e=>{
+    let f=e.target.files?.[0];
+    if(!f||!coverBookId)return;
+
+    let reader=new FileReader();
+
+    reader.onload=()=>{
+        let b=books.find(x=>x.id===coverBookId);
+        if(!b)return;
+
+        b.coverUrl=reader.result;
+        b.coverId="";
+
+        persist();
+
+        if($("bookDetailsDialog").open&&detailsBookId===coverBookId){
+            renderDetailsCoverBox(b);
+        }
+
+        $("coverUpload").value="";
+        $("coverDialog").close();
+
+        toast("Uploaded cover saved");
+    };
+
+    reader.readAsDataURL(f);
+};
+
+$("coverSearch").addEventListener("keydown",e=>{
+    if(e.key==="Enter"){
+        searchCovers();
+    }
+});
+
+$("closeCover").onclick=()=>$("coverDialog").close();
+
+$("closeBookDetails").onclick=()=>$("bookDetailsDialog").close();
+
+$("bookDetailsDialog").addEventListener(
+    "close",
+    ()=>document.body.classList.remove("modal-open")
+);
+
+$("bookDetailsDialog").addEventListener(
+    "cancel",
+    ()=>document.body.classList.remove("modal-open")
+);
+
+$("detailsCover").onclick=()=>{
+    if(detailsBookId){
+        chooseCover(detailsBookId);
+    }
+};
+
+$("detailsSynopsisEditBtn").onclick=()=>{
+    $("detailsSynopsis").value=
+        $("detailsSynopsisView").dataset.raw||"";
+
+    $("detailsSynopsisView").style.display="none";
+    $("detailsSynopsisEdit").style.display="";
+    $("detailsSynopsis").focus();
+};
+
+$("detailsRelookup").onclick=async()=>{
+    if(!detailsBookId)return;
+
+    let b=books.find(
+        x=>String(x.id)===String(detailsBookId)
+    );
+
+    if(!b)return;
+
+    let btn=$("detailsRelookup");
+    btn.disabled=true;
+    btn.textContent="Looking up…";
+
+    try{
+        let info=await fetchBookDetails(b);
+
+        if(info.description){
+            try{
+                info.description=
+                    await cleanSynopsisText(info.description);
+            }catch(e){}
+        }
+
+        $("detailsSynopsis").value=
+            info.description||"";
+
+    }catch(e){}
+
+    btn.disabled=false;
+    btn.textContent="Look up again";
+};
+
+$("detailsFixGrammar").onclick=async()=>{
+    let btn=$("detailsFixGrammar");
+
+    btn.disabled=true;
+    btn.textContent="Checking…";
+
+    try{
+        $("detailsSynopsis").value=
+            await cleanSynopsisText(
+                $("detailsSynopsis").value
+            );
+    }catch(e){}
+
+    btn.disabled=false;
+    btn.textContent="Fix grammar & spelling";
+};
+
+$("detailsSaveSynopsis").onclick=()=>{
+    if(!detailsBookId)return;
+
+    let b=books.find(
+        x=>String(x.id)===String(detailsBookId)
+    );
+
+    if(!b)return;
+
+    let key=bookKey(b);
+    let val=$("detailsSynopsis").value.trim();
+
+    detailsCache[key]={
+        description:val
+    };
+
+    persistDetailsCache();
+
+    setSynopsisView(val);
+
+    $("detailsSynopsisEdit").style.display="none";
+    $("detailsSynopsisView").style.display="";
+
+    toast("Synopsis saved");
+};
+
+async function setReadingStatus(statusValue){
+    if(!detailsBookId)return;
+
+    let b=books.find(
+        x=>String(x.id)===String(detailsBookId)
+    );
+
+    if(!b||String(b.format||"")==="Wishlist"){
+        return;
+    }
+
+    b.readingStatus=statusValue;
+
+    persist();
+
+    openBookDetails(b.id);
+
+    toast(
+        statusValue==="Read"
+            ? "Marked as read"
+            : "Marked as DNF"
+    );
+}
+
+$("detailsReadBtn").onclick=()=>{
+    setReadingStatus("Read");
+};
+
+$("detailsDnfBtn").onclick=()=>{
+    setReadingStatus("DNF");
+};
+
+$("settingsBtn").onclick=()=>{
+    $("webhook").value=
+        localStorage.getItem(URLKEY)||DEFAULT_URL;
+
+    $("libibUrl").value=
+        libibUrl();
+
+    applyTheme();
+
+    $("syncState").textContent=
+        "Using your Google Apps Script endpoint.";
+
+    $("settingsDialog").showModal();
+};
+
+$("darkMode").onchange=e=>{
+    localStorage.setItem(
+        "mpl-dark-mode",
+        e.target.checked?"1":"0"
+    );
+
+    applyTheme();
+};
+
+$("findCovers").onclick=findMissingCovers;
+$("fixAllSynopsisGrammar").onclick=fixAllSynopsisGrammar;
+
+$("closeSettings").onclick=()=>$("settingsDialog").close();
+
+$("saveSettings").onclick=()=>{
+    let u=$("webhook").value.trim();
+
+    if(u){
+        localStorage.setItem(URLKEY,u);
+    }else{
+        localStorage.removeItem(URLKEY);
+    }
+
+    let lu=$("libibUrl").value.trim();
+
+    if(lu){
+        localStorage.setItem(
+            "mpl-libib-url",
+            lu
+        );
+    }else{
+        localStorage.removeItem(
+            "mpl-libib-url"
+        );
+    }
+
+    $("settingsDialog").close();
+
+    toast("Settings saved");
+
+    pull();
+};
+
+$("syncNow").onclick=()=>{
+    pull();
+};
+
+load();
+applyTheme();
+renderAll();
+pull(false);
 </script>
 
 </body></html>
