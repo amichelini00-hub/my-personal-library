@@ -1,7 +1,7 @@
 {
   "name": "My Personal Library",
   "short_name": "Library",
-  "start_url": "./my_personal_library_fixed.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f2e5dc",
   "theme_color": "#171717",
